@@ -5,6 +5,7 @@ from importlib import import_module
 import subprocess
 # TODO: Use regex module for better PCRE support?
 #       https://bitbucket.org/mrabarnett/mrab-regex
+import os
 import re
 import time
 import copy
@@ -12,6 +13,8 @@ from inspect import isfunction
 from functools import reduce
 
 import urwid
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
 
 from vit import version
 from vit.formatter_base import FormatterBase
@@ -393,7 +396,7 @@ class Application():
                     metadata.pop('uuid')
             elif command in self.reports:
                 self.extra_filters = args
-                self.update_report(command)
+                self.update_report(report=command)
                 if 'uuid' in metadata:
                     metadata.pop('uuid')
             elif command in self.task_config.disallowed_reports:
@@ -501,6 +504,19 @@ class Application():
 
     def init_task_list(self):
         self.model = TaskListModel(self.task_config, self.reports)
+
+    def init_observer(self):
+        pipe = self.loop.watch_pipe(self.update_report)
+
+        def on_modified(event):
+            os.write(pipe, b'x')
+
+        event_handler = PatternMatchingEventHandler(patterns=['*/pending.data'], ignore_directories=True)
+        event_handler.on_modified = on_modified
+
+        self.observer = Observer()
+        self.observer.schedule(event_handler, self.model.data_location)
+        self.observer.start()
 
     def init_autocomplete(self):
         context_list = list(self.contexts.keys()) + ['none']
@@ -838,7 +854,7 @@ class Application():
         self.loop.screen.clear()
         self.loop.widget = self.widget
 
-    def update_report(self, report=None):
+    def update_report(self, pipe=None, report=None):
         start = time.time()
         self.task_list = self.table.listbox
         self.previous_focus_position = self.task_list.focus_position if self.task_list.list_walker else 0
@@ -866,6 +882,7 @@ class Application():
         if report:
             self.report = report
         self.init_task_list()
+        self.init_observer()
         self.build_frame()
         self.widget = MainFrame(
             urwid.ListBox([]),
