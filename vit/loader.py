@@ -3,6 +3,7 @@ try:
     import importlib.util
 except:
     import imp
+from xdg import BaseDirectory
 
 from vit import env
 
@@ -10,7 +11,13 @@ DEFAULT_VIT_DIR = '~/.vit'
 
 class Loader(object):
     def __init__(self):
-        self.user_config_dir = os.path.expanduser('VIT_DIR' in env.user and env.user['VIT_DIR'] or DEFAULT_VIT_DIR)
+        vit_dir = DEFAULT_VIT_DIR
+        xdg = BaseDirectory.load_first_config('vit')
+        if 'VIT_DIR' in env.user:
+            vit_dir = env.user['VIT_DIR']
+        elif xdg:
+            vit_dir = xdg
+        self.user_config_dir = os.path.expanduser(vit_dir)
 
     def load_user_class(self, module_type, module_name, class_name):
         module = '%s.%s' % (module_type, module_name)
